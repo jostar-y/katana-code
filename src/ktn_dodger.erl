@@ -1009,6 +1009,8 @@ token_to_string(atom, A) ->
     io_lib:write_atom(A);
 token_to_string(string, S) ->
     io_lib:write_string(S);
+token_to_string(string_concat, S) ->
+    io_lib:write_string(S);
 token_to_string(char, C) ->
     io_lib:write_char(C);
 token_to_string(float, F) ->
