@@ -50,6 +50,8 @@ loop(#{buffer := Str} = State) ->
             ?MODULE:loop(NewState);
         _Unknown ->
             ?MODULE:loop(State)
+    after 60000 ->
+        exit(timeout)
     end.
 
 -spec reply(pid(), pid(), any()) -> any().

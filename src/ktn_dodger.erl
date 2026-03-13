@@ -96,6 +96,12 @@
 %% The following should be: 1) pseudo-uniquely identifiable, and 2)
 %% cause nice looking error messages when the parser has to give up.
 
+%% We use some very weird macros here, because this module was copied from epp_dodger
+-elvis([{elvis_style, macro_naming_convention, disable}]).
+
+%% PreFix is not the same as Prefix
+-elvis([{elvis_style, variable_casing, disable}]).
+
 -define(macro_call, '? <macro> (').
 -define(atom_prefix, "? ").
 -define(var_prefix, "?,").
