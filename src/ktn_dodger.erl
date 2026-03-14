@@ -96,6 +96,12 @@
 %% The following should be: 1) pseudo-uniquely identifiable, and 2)
 %% cause nice looking error messages when the parser has to give up.
 
+%% We use some very weird macros here, because this module was copied from epp_dodger
+-elvis([{elvis_style, macro_naming_convention, disable}]).
+
+%% PreFix is not the same as Prefix
+-elvis([{elvis_style, variable_casing, disable}]).
+
 -define(macro_call, '? <macro> (').
 -define(atom_prefix, "? ").
 -define(var_prefix, "?,").
@@ -380,22 +386,23 @@ extract_escript_header(_) ->
     no_header.
 
 parse_form(Parser, Ts, L1, NoFail, Opt) ->
-    case catch {ok, Parser(Ts, Opt)} of
-        {'EXIT', Term} ->
-            {error, io_error(L1, {unknown, Term}), L1};
-        {error, Term} ->
+    try Parser(Ts, Opt) of
+        F ->
+            {ok, F, L1}
+    catch
+        throw:{error, Term} ->
             IoErr = io_error(L1, Term),
             {error, IoErr, L1};
-        {parse_error, _IoErr} when NoFail ->
+        throw:{parse_error, _IoErr} when NoFail ->
             {ok,
              erl_syntax:set_pos(
                  erl_syntax:text(tokens_to_string(Ts)),
                  erl_anno:new(start_pos(Ts, L1))),
              L1};
-        {parse_error, IoErr} ->
+        throw:{parse_error, IoErr} ->
             {error, IoErr, L1};
-        {ok, F} ->
-            {ok, F, L1}
+        _:Term ->
+            {error, io_error(L1, {unknown, Term}), L1}
     end.
 
 io_error(L, Desc) ->

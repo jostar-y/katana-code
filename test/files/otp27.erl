@@ -7,9 +7,11 @@
 -export([break/0]).
 
 break() ->
-    _ = scan:string(~"""
+    _ = scan:string(
+        ~"""
       This is valid code.
-    """),
+    """
+    ),
 
     Fun = fun() -> ok end,
     ?assertMatch(
