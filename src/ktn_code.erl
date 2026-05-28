@@ -140,7 +140,7 @@ revert(attribute, Node0) ->
 
     Args = erl_syntax:attribute_arguments(Node),
     Pos = erl_syntax:get_pos(Node),
-    {attribute, Pos, Name, Args};
+    {attribute, Pos, Name, attribute_value(Name, Args)};
 revert(macro, Node0) ->
     Subs = erl_syntax:subtrees(Node0),
     Gs = [[erl_syntax:revert(X) || X <- L] || L <- Subs],
@@ -154,6 +154,25 @@ revert(_, Node) ->
     %% When a node can't be reverted we avoid failing by returning
     %% the a node for the atom 'non_reversible_form'
     {atom, [{node, Node}], non_reversible_form}.
+
+%% A `-type'/`-opaque'/`-nominal' definition whose body contains a macro cannot
+%% be reverted by erl_syntax into the usual `{Name, Type, Params}' form, so it
+%% arrives here as a single tuple argument encoding that triple. Normalise it
+%% back to the 3-tuple so `to_map/1' classifies it consistently (e.g. `-type' as
+%% `type_attr' rather than the raw `type') and callers get a stable value shape.
+attribute_value(Kind, [{tuple, _, [{atom, _, Name}, Type, Params]}]) when
+    Kind =:= type; Kind =:= opaque; Kind =:= nominal
+->
+    {Name, Type, cons_to_list(Params)};
+attribute_value(_Kind, Args) ->
+    Args.
+
+cons_to_list({nil, _}) ->
+    [];
+cons_to_list({cons, _, Head, Tail}) ->
+    [Head | cons_to_list(Tail)];
+cons_to_list(Other) ->
+    [Other].
 
 token_to_map({Type, Attrs}) ->
     #{type => Type, attrs => #{text => get_text(Attrs), location => get_location(Attrs)}};
@@ -983,12 +1002,19 @@ to_map({macro, Attrs, Name, Args}) ->
                 Args
         end,
     NameStr = macro_name(Name),
+    Text =
+        case get_text(Attrs) of
+            undefined ->
+                "";
+            T ->
+                T
+        end,
     #{
         type => macro,
         attrs =>
             #{
                 location => get_location(Attrs),
-                text => get_text(Attrs) ++ NameStr,
+                text => Text ++ NameStr,
                 name => NameStr
             },
         content => to_map(Args1)

@@ -8,6 +8,7 @@
     parse_tree/1,
     parse_tree_otp/1,
     latin1_parse_tree/1,
+    parse_macro_in_type/1,
     to_string/1
 ]).
 
@@ -19,7 +20,7 @@
 
 -if(?OTP_RELEASE >= 28).
 
--export([parse_generators/1]).
+-export([parse_generators/1, parse_macro_in_nominal/1]).
 
 -endif.
 -endif.
@@ -320,12 +321,58 @@ parse_generators(_Config) ->
             [no_fail]
         ).
 
+-spec parse_macro_in_nominal(config()) -> ok.
+parse_macro_in_nominal(_Config) ->
+    %% A macro in a `-nominal' body must still classify as `nominal' and expose
+    %% the `{Name, Type, Params}' value rather than a raw token list, including
+    %% with multiple, deeply nested macros.
+    #{type := nominal, attrs := #{value := {my_nominal, _, []}}} =
+        type_def_node(<<"-nominal my_nominal() :: {?MODULE, list()}.">>),
+    #{type := nominal, attrs := #{value := {nested, _, []}}} =
+        type_def_node(<<"-nominal nested() :: {?A, [?B], #{?C => ?D}}.">>),
+    ok.
+
 -endif.
 -endif.
+
+-spec parse_macro_in_type(config()) -> ok.
+parse_macro_in_type(_Config) ->
+    %% A macro in a type body must still classify the attribute correctly (so
+    %% `-type' stays `type_attr', not the raw `type') and expose a stable
+    %% `{Name, Type, Params}' value instead of a raw token list.
+    #{type := type_attr, attrs := #{name := my_type}} =
+        type_def_node(<<"-type my_type() :: {?MODULE, list()}.">>),
+    #{type := opaque, attrs := #{value := {my_opaque, _, []}}} =
+        type_def_node(<<"-opaque my_opaque() :: {?MODULE, list()}.">>),
+    %% The normalisation is driven by the shape erl_syntax produces for any
+    %% macro-in-body type, so it holds no matter how many macros appear, how
+    %% deeply they nest, or whether they sit in tuples, lists, maps (incl. as
+    %% keys), remote types, or macro calls.
+    Bodies = [
+        <<"{?MODULE, [?MODULE], #{?MODULE => ?MODULE}}">>,
+        <<"#{?KEY := value, key := ?VALUE}">>,
+        <<"?MOD:remote()">>,
+        <<"?WRAP({?MODULE, list()})">>,
+        <<"[?A | ?B]">>
+    ],
+    lists:foreach(
+        fun(Body) ->
+            Source = <<"-opaque o() :: ", Body/binary, $.>>,
+            #{type := opaque, attrs := #{value := {o, _, []}}} = type_def_node(Source)
+        end,
+        Bodies
+    ),
+    ok.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Helper
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+type_def_node(Source) ->
+    #{content := Content} = ktn_code:parse_tree(Source),
+    [Node] =
+        [N || N <- Content, lists:member(ktn_code:type(N), [type_attr, type, opaque, nominal])],
+    Node.
 
 -spec shuffle([string()]) -> [[any()]].
 shuffle(List) ->
